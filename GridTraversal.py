@@ -10,8 +10,7 @@ GREEN=(0,255,0)
 RED=(225,0,0)
 YELLOW=(225,225,0)
 COLOR_MAP={0:WHITE,1:BLUE,2:RED}
-FPS=0.8
-Clock=pygame.time.Clock()
+FPS=4
 
 class Grid:
     def __init__(self,grid,obstacles,start,goal,max_time):
@@ -68,7 +67,7 @@ class Cell:
             self.g=float('inf')
             self.h=grid.heuristic((x,y))  
 class KnownDynamicObstacle:
-    def __init__(self,path):   # path=[[(t,p)],[t],[(t,p,t_interval)]]
+    def __init__(self,path):   # path=[[(t,p)],[t],[(t,d,t_interval)]]
         self.appear=sorted(path[0])     
         self.disappear=sorted(path[1])
         self.move=sorted(path[2])
@@ -148,7 +147,7 @@ def ScalerMultiplication(p,s):
 def constructpath(pos):
     path=[]
     while(pos):
-        path.append((pos.x,pos.y))
+        path.append((pos.x,pos.y,pos.z))
         pos=pos.parent
     return path[::-1]
 
@@ -181,14 +180,11 @@ def traverse(grid):
                     Cells[z][y][x].f=new_f
                     Cells[z][y][x].parent=Cells[current[2]][current[1]][current[0]]
                     heapq.heappush(open_list,(new_f,(x,y,z)))     
-    # pygame.init()   
-    # for pos in L:
-    #     Clock.tick(FPS)
-    #     Visualize(grid,pos)
     return L
                   
 
-def Visualize(grid,pos):
+def Visualize(grid,pos,t):
+    font=pygame.font.SysFont("Arial", 20)
     for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit()
@@ -210,9 +206,31 @@ def Visualize(grid,pos):
         pygame.draw.line(background, BLACK, (0, i * CELL_SIZE), (width * CELL_SIZE, i * CELL_SIZE), 1)
     pygame.draw.circle(background,YELLOW,(CELL_SIZE*(0.5+pos[0]),CELL_SIZE*(0.5+pos[1])),CELL_SIZE/2)
     pygame.draw.circle(background,GREEN,(CELL_SIZE*(0.5+grid.goal[0]),CELL_SIZE*(0.5+grid.goal[1])),CELL_SIZE/2)
+    for x in grid.obstacle_positions:
+        if t in x:
+            pygame.draw.rect(background,COLOR_MAP[2],(x[t][0]*CELL_SIZE,x[t][1]*CELL_SIZE,CELL_SIZE,CELL_SIZE))
+
+    text=font.render(str(round(t*TIMESCALE,1)),True,(50,0,50))
+
     Screen.unlock()
     Screen.blit(background,(0,0))
+    Screen.blit(text,(0,0))
     pygame.display.flip()
+
+def show_solution(grid):
+    Clock=pygame.time.Clock()
+    L=traverse(grid)
+    print(L)
+    pygame.init() 
+    max_t=L[len(L)-1][2]  
+    pos=(L[0][0],L[0][1])
+    i=1
+    for t in range(max_t+1):
+        if t==L[i][2]:
+            pos=(L[i][0],L[i][1])
+            i+=1
+        Visualize(grid,pos,t)
+        Clock.tick(FPS)
 
 grid_data = [
     [0, 0, 0, 0, 0],
@@ -223,18 +241,17 @@ grid_data = [
 ]
 obstacle_path = [
     [  # appear: [(time, position)]
-        (0.0, (1.0, 1.0)),
+        (0.0, (0.0, 3.0)),
         (5.0, (3.0, 1.0))
     ],
-    [  # disappear: [time]
-        2.0,
+    [  
+        5.0,
         7.0
     ],
-    [  # move: [(start_time, direction_vector, duration)]
-        (0.5, (1.0, 0.0), 1.0),  # move right for 1s
-        (5.5, (0.0, 1.0), 1.5)   # move down for 1.5s
+    [  
+        (5.5, (0.0, 1.0), 1.5)   
     ]
 ]
 obstacle = KnownDynamicObstacle(obstacle_path)
 grid = Grid(grid_data,[obstacle], (0, 0), (4, 4),16)
-print(traverse(grid))
+show_solution(grid)
