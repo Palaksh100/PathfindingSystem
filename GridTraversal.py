@@ -1,4 +1,6 @@
 import pygame
+import sys
+import ast
 import heapq
 
 CELL_SIZE=30
@@ -8,8 +10,9 @@ BLACK=(0,0,0)
 BLUE=(0,0,255)
 GREEN=(0,255,0)
 RED=(225,0,0)
+ORANGE=(255,165,0)
 YELLOW=(225,225,0)
-COLOR_MAP={0:WHITE,1:BLUE,2:RED}
+COLOR_MAP={0:WHITE,1:BLUE,2:RED,3:ORANGE}
 FPS=4
 
 class Grid:
@@ -38,10 +41,10 @@ class Grid:
                         if z-dz>=0:
                             if self.map[z-dz][y][x]==2:
                                 return False
-                        if z+dz<=round(grid.max_time/TIMESCALE):
+                        if z+dz<=round(self.max_time/TIMESCALE):
                             if self.map[z+dz][y][x]==2:
                                 return False
-                if z<=round(grid.max_time/TIMESCALE):
+                if z<=round(self.max_time/TIMESCALE):
                     return True
         return False
     def find_neighbours(self,position_time):
@@ -51,7 +54,7 @@ class Grid:
             X,Y=x+dx,y+dy
             if self.is_valid(X,Y,z+round(1/TIMESCALE)):
                 yield (X,Y,z+round(1/TIMESCALE))
-            if self.is_valid(x,x,z+1):
+            if self.is_valid(x,y,z+1):
                 yield (x,y,z+1)
     def heuristic(self,point):
         return abs(point[0]-self.goal[0])+abs(point[1]-self.goal[1])  
@@ -75,6 +78,7 @@ class KnownDynamicObstacle:
         self.position=None
 
     def restricted_positions(self,max_time):
+        '''Returns positions of all active obstacles at each time along with blocked cells'''
         def find_obstacle_positions_move(self,move_event,time_position_map):
             time=round(move_event[0]/TIMESCALE)
             interval=round(move_event[2]/TIMESCALE)
@@ -113,6 +117,15 @@ class KnownDynamicObstacle:
         for t in time_position_map:
             blockage_map[t]=integral_set(time_position_map[t])
         return (time_position_map,blockage_map)
+    
+class UnKnownDynamicObstacle:
+    def __init__(self,position,velocity):   
+        self.position=position
+        self.velocity=velocity
+
+    def UpdatePosition(self,time):
+        self.position=AddCoordinate(self.position,ScalerMultiplication(self.velocity,time))
+    
     
 def integral_set(position):
     x,y=position[0],position[1]
@@ -183,12 +196,8 @@ def traverse(grid):
     return L
                   
 
-def Visualize(grid,pos,t):
+def Visualize(grid,pos,UnknownDynamicObstacles,t):
     font=pygame.font.SysFont("Arial", 20)
-    for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    pygame.quit()
-                    exit()
     width,height=grid.width,grid.height
     Screen=pygame.display.set_mode((width*CELL_SIZE,height*CELL_SIZE))
     background = pygame.Surface((Screen.get_size()))
@@ -210,6 +219,9 @@ def Visualize(grid,pos,t):
         if t in x:
             pygame.draw.rect(background,COLOR_MAP[2],(x[t][0]*CELL_SIZE,x[t][1]*CELL_SIZE,CELL_SIZE,CELL_SIZE))
 
+    for obstacle in UnknownDynamicObstacles:
+        pygame.draw.rect(background,COLOR_MAP[3],(obstacle.position[0]*CELL_SIZE,obstacle.position[1]*CELL_SIZE,CELL_SIZE,CELL_SIZE))
+
     text=font.render(str(round(t*TIMESCALE,1)),True,(50,0,50))
 
     Screen.unlock()
@@ -225,12 +237,38 @@ def show_solution(grid):
     max_t=L[len(L)-1][2]  
     pos=(L[0][0],L[0][1])
     i=1
+    UserObstacles=[]
     for t in range(max_t+1):
-        if t==L[i][2]:
-            pos=(L[i][0],L[i][1])
-            i+=1
-        Visualize(grid,pos,t)
+        while i < len(L) and t >= L[i][2]:
+            pos = (L[i][0], L[i][1])
+            i += 1
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key==pygame.K_p:
+                    for i in range(1,1+len(UserObstacles)):
+                        print(f"Obstacle-{i} -> Position:{UserObstacles[i-1].position},Velocity:{UserObstacles[i-1].velocity}")
+                    user_input=ast.literal_eval(input("Enter velocity change list(Obstacle number,new velocity) >>"))
+                    for data in user_input:
+                        UserObstacles[data[0]-1].velocity=data[1]
+
+                    user_input=ast.literal_eval(input("Enter deletion list(Obstacle number) >>"))
+                    for index in user_input:
+                        UserObstacles.pop(index-1)
+
+                    user_input=ast.literal_eval(input("Enter addition list(Position,velocity) >>"))
+                    for obstacle in user_input:
+                        UserObstacles.append(UnKnownDynamicObstacle(obstacle[0],obstacle[1]))
+                    
+        Visualize(grid,pos,UserObstacles,t)
+        for obstacle in UserObstacles:
+            obstacle.UpdatePosition(TIMESCALE)
         Clock.tick(FPS)
+    pygame.quit()
+    sys.exit()
 
 grid_data = [
     [0, 0, 0, 0, 0],
