@@ -136,7 +136,11 @@ class UnKnownDynamicObstacle:
         self.UpdateBlockageMap(z,max_z)
 
     def valid_pos(self,pos):
-        return -1<pos[0]<self.grid_width and -1<pos[1]<self.grid_height
+        s=integral_set(pos)
+        for x,y in s:
+            if not(-1<x<self.grid_width and -1<y<self.grid_height):
+                return False
+        return True
 
     def UpdateBlockageMap(self,z,max_z):
         self.blockage_map=dict()
@@ -145,14 +149,13 @@ class UnKnownDynamicObstacle:
         while self.valid_pos(pos) and z+t<max_z:
             self.blockage_map[z+t]=integral_set(pos)
             pos=AddCoordinate(self.position,ScalerMultiplication(self.velocity,t*TIMESCALE))
-            t+=1
-            self.blockage_map[z+t]=integral_set(pos)
             removable_pos=[]
             for P in self.blockage_map[z+t]:
                 if not self.valid_pos(pos):
                     removable_pos.append(P)
             for P in removable_pos:
                 self.blockage_map[z+t].remove(P)
+            t+=1
 
     def UpdatePosition(self,time):
         self.position=exact_coordinate(AddCoordinate(self.position,ScalerMultiplication(self.velocity,time)))    
@@ -208,6 +211,7 @@ def traverse(grid,UserObstacles=[],start_pos=None,start_time=0):
         blocked_points=obstacle.blockage_map
         for t in blocked_points:
             for x,y in blocked_points[t]:
+                print(x,y,t)
                 grid.map[t][y][x]=3
 
     if not ((grid.is_valid(grid.start[0],grid.start[1],start_time)) and (grid.is_valid(grid.goal[0],grid.goal[1]))):
@@ -220,6 +224,7 @@ def traverse(grid,UserObstacles=[],start_pos=None,start_time=0):
     open_list=[]
     heapq.heappush(open_list,(grid.heuristic(grid.start),grid.start+(start_time,)))
     L=[]
+    stationary_path = [(grid.start[0], grid.start[1], t) for t in range(start_time, round(grid.max_time / TIMESCALE))]
 
     while open_list:
         _,current=heapq.heappop(open_list)
@@ -231,7 +236,8 @@ def traverse(grid,UserObstacles=[],start_pos=None,start_time=0):
         
         for x,y,z in grid.find_neighbours(current):
             if z>=round(grid.max_time/TIMESCALE):
-                return [grid.start]* (round(grid.max_time/TIMESCALE)-start_time)
+                print(1234)
+                return stationary_path
             if not Done[z][y][x]:
                 new_g=Cells[current[2]][current[1]][current[0]].g+(z-current[2])
                 new_f=new_g+grid.heuristic((x,y))
@@ -239,7 +245,10 @@ def traverse(grid,UserObstacles=[],start_pos=None,start_time=0):
                     Cells[z][y][x].g=new_g
                     Cells[z][y][x].f=new_f
                     Cells[z][y][x].parent=Cells[current[2]][current[1]][current[0]]
-                    heapq.heappush(open_list,(new_f,(x,y,z)))     
+                    heapq.heappush(open_list,(new_f,(x,y,z)))   
+    if not L:
+        print(5678)
+        return stationary_path  
     return L
                   
 
@@ -362,30 +371,18 @@ def show_solution(grid):
                             elif selected_obs>=0:
                                 if event.key==pygame.K_LEFT:
                                     UserObstacles[selected_obs].velocity=AddCoordinate(UserObstacles[selected_obs].velocity,(-0.1,0))
+                                    UserObstacles[selected_obs].UpdateBlockageMap(t,round(grid.max_time/TIMESCALE))
                                 elif event.key==pygame.K_RIGHT:
                                     UserObstacles[selected_obs].velocity=AddCoordinate(UserObstacles[selected_obs].velocity,(0.1,0))
+                                    UserObstacles[selected_obs].UpdateBlockageMap(t,round(grid.max_time/TIMESCALE))
                                 elif event.key==pygame.K_UP:
                                     UserObstacles[selected_obs].velocity=AddCoordinate(UserObstacles[selected_obs].velocity,(0,0.1))
+                                    UserObstacles[selected_obs].UpdateBlockageMap(t,round(grid.max_time/TIMESCALE))
                                 elif event.key==pygame.K_DOWN:
                                     UserObstacles[selected_obs].velocity=AddCoordinate(UserObstacles[selected_obs].velocity,(0,-0.1))
+                                    UserObstacles[selected_obs].UpdateBlockageMap(t,round(grid.max_time/TIMESCALE))
                             Visualize(grid,pos,UserObstacles,t,selected_obs=selected_obs)
                         
-                        
-
-                # for i in range(1,1+len(UserObstacles)):
-                #     print(f"Obstacle-{i} -> Position:{UserObstacles[i-1].position},Velocity:{UserObstacles[i-1].velocity}")
-                # user_input=ast.literal_eval(input("Enter velocity change list(Obstacle number,new velocity) >>"))
-                # for data in user_input:
-                #     UserObstacles[data[0]-1].velocity=data[1]
-                #     UserObstacles[data[0]-1].UpdateBlockageMap(t)
-
-                # user_input=ast.literal_eval(input("Enter deletion list(Obstacle number) >>"))
-                # for index in user_input:
-                #     UserObstacles.pop(index-1)
-
-                # user_input=ast.literal_eval(input("Enter addition list(Position,velocity) >>"))
-                # for obstacle in user_input:
-                #     UserObstacles.append(UnKnownDynamicObstacle(obstacle[0],obstacle[1],t,grid.width,grid.height))
             L=traverse(grid,UserObstacles,pos,t)
             i=1
 
@@ -585,9 +582,6 @@ while running:
                                                 Visualize(grid,t=round(t/TIMESCALE))
                                             elif event.key == pygame.K_RIGHT:
                                                 t=min(t+1,max_time)
-                                                Visualize(grid,t=round(t/TIMESCALE))
-                                
-
-                            
+                                                Visualize(grid,t=round(t/TIMESCALE))                         
 
 show_solution(grid)
