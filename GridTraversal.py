@@ -13,7 +13,8 @@ GREEN=(0,255,0)
 RED=(225,0,0)
 ORANGE=(255,165,0)
 YELLOW=(225,225,0)
-COLOR_MAP={0:WHITE,1:BLUE,2:RED,3:ORANGE}
+PINK=(255,0,255)
+COLOR_MAP={0:WHITE,1:BLUE,2:RED,3:ORANGE,4:PINK}
 FPS=8
 
 class Grid:
@@ -24,6 +25,7 @@ class Grid:
         self.width=len(grid[0])
         self.height=len(grid)
         self.max_time=max_time
+        self.Enemies=[]
         self.obstacles=[]
         self.obstacle_positions=[]
         self.map = [ [row[:] for row in self.grid] for _ in range(round(self.max_time / TIMESCALE + 1)) ]
@@ -42,7 +44,7 @@ class Grid:
                 self.original_map[t][y][x]=2
 
     def is_valid(self,x,y,z=-1):
-        if 0<=x<self.width and 0<=y<self.height:
+        if 0<=x<self.width and 0<=y<self.height and z<round(self.max_time/TIMESCALE):
             if self.grid[y][x]==0:
                 if z>=0:
                     for dz in range(0,round(1/TIMESCALE)):
@@ -159,6 +161,13 @@ class UnKnownDynamicObstacle:
 
     def UpdatePosition(self,time):
         self.position=exact_coordinate(AddCoordinate(self.position,ScalerMultiplication(self.velocity,time)))    
+
+class Enemy:
+    def __init__(self,position,z):
+        self.position=position
+        self.next_move_z=z
+        self.path=None
+        self.confirmed_path=[(position[0],position[1],z)]
     
 def integral_set(position):
     x,y=position[0],position[1]
@@ -201,7 +210,7 @@ def mouse_position():
     mx, my = pygame.mouse.get_pos()
     return mx // CELL_SIZE, my // CELL_SIZE
 
-def traverse(grid,UserObstacles=[],start_pos=None,start_time=0):
+def traverse(grid,UserObstacles=[],start_pos=None,start_time=0,enemy=False,target=None):
     if start_pos:
         grid.start=start_pos
     width,height,max_time=grid.width,grid.height,grid.max_time
@@ -213,7 +222,18 @@ def traverse(grid,UserObstacles=[],start_pos=None,start_time=0):
             for x,y in blocked_points[t]:
                 grid.map[t][y][x]=3
 
-    if not ((grid.is_valid(grid.start[0],grid.start[1],start_time)) and (grid.is_valid(grid.goal[0],grid.goal[1]))):
+    if not(enemy):
+        for enemy in grid.Enemies:
+            for x,y,z in enemy.path:
+                for t in range(z-round(1/TIMESCALE)+1,z+round(1/TIMESCALE)):
+                    if 0<=t<round(grid.max_time/TIMESCALE):
+                        grid.map[t][y][x]=4
+            x,y,z=enemy.confirmed_path[-1]
+            for t in range(z,round(grid.max_time/TIMESCALE)):
+                grid.map[t][y][x]=4
+        target=grid.goal
+
+    if not ((grid.is_valid(grid.start[0],grid.start[1],start_time)) and (grid.is_valid(target[0],target[1]))):
         return 
     
     Done= [[[False for _ in range(width)] for _ in range(height)] for _ in range(round(max_time/TIMESCALE))]
@@ -229,7 +249,7 @@ def traverse(grid,UserObstacles=[],start_pos=None,start_time=0):
         _,current=heapq.heappop(open_list)
         Done[current[2]][current[1]][current[0]]=True
 
-        if (current[0],current[1])==grid.goal:
+        if (current[0],current[1])==target:
             L=constructpath(Cells[current[2]][current[1]][current[0]])
             break
         
@@ -248,8 +268,50 @@ def traverse(grid,UserObstacles=[],start_pos=None,start_time=0):
         return stationary_path  
     return L
                   
+def Paths(grid,UserObstacles=[],start_pos=None,start_time=0):
+    max_z=round(grid.max_time/TIMESCALE)
+    if start_pos:
+        grid.start=start_pos
+    player_pos=grid.start
+    Enemy_pos=[enemy.position for enemy in grid.Enemies]
+    player_confirmed_path=[(player_pos[0],player_pos[1],start_time)]
+    player_next_z=start_time
 
-def Visualize(grid,pos=None,UnknownDynamicObstacles=[],t=0,Showobstacles=True,selected_obs=-1):
+    for enemy in grid.Enemies:
+        enemy.confirmed_path=[(enemy.position[0],enemy.position[1],start_time)]
+        enemy.next_move_z=start_time
+
+    for t in range(start_time,max_z):
+        destroyed_enemies=[]
+        for i in range(len(grid.Enemies)):
+            enemy=grid.Enemies[i]
+            if t==enemy.next_move_z:
+                Enemy_pos[i]=(enemy.confirmed_path[-1][0],enemy.confirmed_path[-1][1])
+                enemy.path=traverse(grid,UserObstacles,Enemy_pos[i],t,enemy=True,target=player_pos)
+                if enemy.path:
+                    enemy.confirmed_path.append(enemy.path[1])
+                    enemy.next_move_z=enemy.path[1][2]
+                else:
+                    destroyed_enemies.append(i)
+                    
+        for i in destroyed_enemies:
+            grid.Enemies.pop(i)
+
+        if t==player_next_z:
+            player_pos=(player_confirmed_path[-1][0],player_confirmed_path[-1][1])
+            if player_pos==grid.goal:
+                break
+            player_path=traverse(grid,UserObstacles,player_pos,t)
+            if not(player_path):
+                print("No path found")
+                pygame.quit()
+                sys.exit()
+            player_confirmed_path.append(player_path[1])
+            player_next_z=player_confirmed_path[-1][2]
+
+    return player_confirmed_path
+
+def Visualize(grid,pos=None,UnknownDynamicObstacles=[],t=0,Showobstacles=True,selected_obs=-1,selected_enemy=-1):
     if not pos:
         pos=grid.start
 
@@ -281,6 +343,9 @@ def Visualize(grid,pos=None,UnknownDynamicObstacles=[],t=0,Showobstacles=True,se
     for obstacle in UnknownDynamicObstacles:
         pygame.draw.rect(background,COLOR_MAP[3],(obstacle.position[0]*CELL_SIZE,obstacle.position[1]*CELL_SIZE,CELL_SIZE,CELL_SIZE))
     
+    for enemy in grid.Enemies:
+        pygame.draw.circle(background,COLOR_MAP[4],(CELL_SIZE*(0.5+enemy.position[0]),CELL_SIZE*(0.5+enemy.position[1])),CELL_SIZE/2)
+
     if selected_obs!=-1:
         x,y=UnknownDynamicObstacles[selected_obs].position
         pygame.draw.rect(background, (0,255,255), pygame.Rect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE))
@@ -288,6 +353,10 @@ def Visualize(grid,pos=None,UnknownDynamicObstacles=[],t=0,Showobstacles=True,se
                 start_pos = (obs.position[0] * CELL_SIZE + CELL_SIZE // 2, obs.position[1] * CELL_SIZE + CELL_SIZE // 2)
                 end_pos = (start_pos[0] + obs.velocity[0] * CELL_SIZE, start_pos[1] + obs.velocity[1] * CELL_SIZE)
                 pygame.draw.line(background, (255, 0, 0), start_pos, end_pos, 2)
+    if selected_enemy!=-1:
+        enemy=grid.Enemies[selected_enemy]
+        x,y=enemy.position
+        pygame.draw.circle(background,(0,255,255),(CELL_SIZE*(0.5+enemy.position[0]),CELL_SIZE*(0.5+enemy.position[1])),CELL_SIZE/2)
 
     text=font.render(str(round(t*TIMESCALE,1)),True,(50,0,50))
 
@@ -298,7 +367,8 @@ def Visualize(grid,pos=None,UnknownDynamicObstacles=[],t=0,Showobstacles=True,se
 
 def show_solution(grid):
     Clock=pygame.time.Clock()
-    L=traverse(grid)
+    enemy_i=[1]*len(grid.Enemies)
+    L=Paths(grid)
     pos=(L[0][0],L[0][1])
     i=1
     UserObstacles=[]  # UserObstacls=[(p,v)]
@@ -307,12 +377,20 @@ def show_solution(grid):
     for t in range(round(grid.max_time/TIMESCALE)):
         if i==len(L):
             break
+
         while i < len(L) and t >= L[i][2]:
             pos = (L[i][0], L[i][1])
             i += 1
             if pause_next:
                 pause_next=False
                 pause=True
+
+        for k in range(len(grid.Enemies)):
+            enemy=grid.Enemies[k]
+            path=enemy.confirmed_path
+            while enemy_i[k] < len(path) and t >= path[enemy_i[k]][2]:
+                enemy.position = (path[enemy_i[k]][0], path[enemy_i[k]][1])
+                enemy_i[k] += 1
 
         Visualize(grid,pos,UserObstacles,t)
 
@@ -370,15 +448,64 @@ def show_solution(grid):
                                     UserObstacles[selected_obs].velocity=AddCoordinate(UserObstacles[selected_obs].velocity,(0.1,0))
                                     UserObstacles[selected_obs].UpdateBlockageMap(t,round(grid.max_time/TIMESCALE))
                                 elif event.key==pygame.K_UP:
-                                    UserObstacles[selected_obs].velocity=AddCoordinate(UserObstacles[selected_obs].velocity,(0,0.1))
-                                    UserObstacles[selected_obs].UpdateBlockageMap(t,round(grid.max_time/TIMESCALE))
-                                elif event.key==pygame.K_DOWN:
                                     UserObstacles[selected_obs].velocity=AddCoordinate(UserObstacles[selected_obs].velocity,(0,-0.1))
                                     UserObstacles[selected_obs].UpdateBlockageMap(t,round(grid.max_time/TIMESCALE))
+                                elif event.key==pygame.K_DOWN:
+                                    UserObstacles[selected_obs].velocity=AddCoordinate(UserObstacles[selected_obs].velocity,(0,0.1))
+                                    UserObstacles[selected_obs].UpdateBlockageMap(t,round(grid.max_time/TIMESCALE))
                             Visualize(grid,pos,UserObstacles,t,selected_obs=selected_obs)
+            
+            pause=True
+            selected_enemy=-1
+            while pause:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        pygame.quit()
+                        sys.exit()
+                    if event.type == pygame.KEYDOWN:
+                        if event.key==pygame.K_p:
+                            pause=False
+                            break
+                        else:
+                            if event.key==pygame.K_m:
+                                if grid.Enemies:
+                                    selected_enemy=(selected_enemy-1)%len(grid.Enemies)
+                            elif event.key==pygame.K_n:
+                                if grid.Enemies:
+                                    selected_enemy=(selected_enemy+1)%len(grid.Enemies)
+                            elif event.key==pygame.K_d:
+                                if selected_enemy>=0:
+                                    grid.Enemies.pop(selected_enemy)
+                                    if grid.Enemies:
+                                        selected_enemy=(selected_enemy-1)%len(grid.Enemies)
+                                    else:
+                                        selected_enemy=-1
+                            elif event.key==pygame.K_a:
+                                running=True
+                                while running:
+                                    for event in pygame.event.get():
+                                        if event.type == pygame.QUIT:
+                                            pygame.quit()
+                                            sys.exit()
+
+                                        if event.type==pygame.MOUSEBUTTONDOWN:
+                                            x,y=mouse_position()
+                                            if 0 <= x < grid.width and 0 <= y < grid.height:
+                                                try:
+                                                    grid.Enemies.append(Enemy((x,y),t))
+                                                    selected_enemy=len(grid.Enemies)-1
+                                                except Exception as e:
+                                                    print("Failed to add enemy:", e)
+                                                    running = False
+                                                running=False
+                                    Visualize(grid, pos, UserObstacles, t, selected_enemy=selected_enemy)
+                                    Clock.tick(FPS)
+                            Visualize(grid,pos,UserObstacles,t,selected_enemy=selected_enemy)
                         
-            L=traverse(grid,UserObstacles,pos,t)
+                        
+            L=Paths(grid,UserObstacles,pos,t)
             i=1
+            enemy_i=[1]*len(grid.Enemies)
 
         for obstacle in UserObstacles:
             obstacle.UpdatePosition(TIMESCALE)
@@ -427,6 +554,24 @@ while running:
                     clicks+=1
                 else:
                     grid.grid[y][x] = 1 - grid.grid[y][x]  
+            Visualize(grid)
+
+running=True
+while running:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_RETURN:
+                running=False
+                break 
+
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            x, y = mouse_position()
+            if 0 <= x < grid.width and 0 <= y < grid.height:
+                grid.Enemies.append(Enemy((x,y),0))  
             Visualize(grid)
 
 running=True
@@ -492,7 +637,7 @@ while running:
                                     for event in pygame.event.get():
                                         if event.type == pygame.MOUSEBUTTONDOWN:
                                             x1,y1=mouse_position()
-                                            if 0 <= x1 < grid.width and 0 <= y2 < grid.height:
+                                            if 0 <= x1 < grid.width and 0 <= y1 < grid.height:
                                                 highlight_color=(255,0,0)
                                                 pygame.draw.rect(pygame.display.get_surface(), highlight_color, pygame.Rect(x1 * CELL_SIZE, y1 * CELL_SIZE, CELL_SIZE, CELL_SIZE))
                                                 pygame.display.update()
@@ -506,8 +651,8 @@ while running:
                                 while running2:
                                     for event in pygame.event.get():
                                         if event.type == pygame.MOUSEBUTTONDOWN:
+                                            x2,y2=mouse_position()
                                             if 0 <= x2 < grid.width and 0 <= y2 < grid.height:
-                                                x2,y2=mouse_position()
                                                 obstacle_path[2].append((init_t,(x2-x1,y2-y1),t-init_t))
                                                 highlight_color=(255,0,0)
                                                 pygame.draw.rect(pygame.display.get_surface(), highlight_color, pygame.Rect(x2 * CELL_SIZE, y2 * CELL_SIZE, CELL_SIZE, CELL_SIZE))
