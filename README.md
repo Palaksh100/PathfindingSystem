@@ -74,10 +74,6 @@ To set up a local instance of the application, follow the steps below.
 ### Prerequisites
 The following dependencies are required to be installed for the project to function properly:
 <!-- UPDATE -->
-* npm
-  ```sh
-  npm install npm@latest -g
-  ```
 * Python 3.13
 
 <p align="right">(<a href="#top">back to top</a>)</p>
@@ -90,7 +86,12 @@ _Now that the environment has been set up and configured to properly compile and
    ```sh
    git clone https://github.com/cgs-iitkgp/PathfindingSystem.git
    ```
-2. Execute the script
+2. Install dependencies
+   ```sh
+   pip install -r requirements.txt
+   ```
+   
+3. Execute the script
    ```sh
    python src/GridTraversal.py
    ```
