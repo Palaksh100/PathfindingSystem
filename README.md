@@ -49,12 +49,6 @@
 <!-- ABOUT THE PROJECT -->
 ## About The Project
 <!-- UPDATE -->
-<div align="center">
-  <a href="https://github.com/cgs-iitkgp/PathfindingSystem">
-    <img width="80%" alt="image" src="https://user-images.githubusercontent.com/86282911/206632547-a3b34b47-e7ae-4186-a1e6-ecda7ddb38e6.png">
-  </a>
-</div>
-
 This repository contains a grid-based pathfinding system created from scratch that finds the path to reach a goal on the grid while avoiding both static and dynamic obstacles in the shortest time by using A* algorithm.
 It uses Python and Pygame for simulation.
 
@@ -84,6 +78,7 @@ The following dependencies are required to be installed for the project to funct
   ```sh
   npm install npm@latest -g
   ```
+* Python 3.13
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -95,22 +90,16 @@ _Now that the environment has been set up and configured to properly compile and
    ```sh
    git clone https://github.com/cgs-iitkgp/PathfindingSystem.git
    ```
-2. Make the script executable
+2. Execute the script
    ```sh
-   cd ./PathfindingSystem
-   chmod +x ./PathfindingSystem
-   ```
-3. Execute the script
-   ```sh
-   ./PathfindingSystem
+   python src/GridTraversal.py
    ```
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
 
 <!-- USAGE EXAMPLES -->
-## Usage
-<!-- UPDATE -->
+## Usage<!-- UPDATE -->
 
 <div align="center">
   <a href="https://github.com/cgs-iitkgp/PathfindingSystem">
